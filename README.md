@@ -23,11 +23,20 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-On Windows, activate the environment with `.venv\Scripts\activate`.
-
 Obtain the official [DINOv3 source and ViT-S/16 weights](https://github.com/facebookresearch/dinov3). Pass the source location through `--encoder-repo` or `DINOV3_REPO`; this can be omitted when `dinov3` is already importable. The pretrained backbone and datasets are not distributed here.
 
 ## Data
+
+| Dataset | Download |
+| --- | --- |
+| Kvasir-SEG | [Simula](https://datasets.simula.no/kvasir-seg/) |
+| CVC-ClinicDB | [CVC-Colon datasets](https://pages.cvc.uab.es/CVC-Colon/index.php/databases/) |
+| CVC-ColonDB | [CVC-Colon datasets](https://pages.cvc.uab.es/CVC-Colon/index.php/databases/) |
+| ETIS-LaribPolypDB | [ETIS-Larib](https://polyp.grand-challenge.org/ETISLarib/) |
+| BKAI-IGH NeoPolyp | [Kaggle](https://www.kaggle.com/competitions/bkai-igh-neopolyp/data) |
+| BUSI | [Cairo University](https://scholar.cu.edu.eg/?q=afahmy/pages/dataset) |
+| ISIC2017 | [ISIC Challenge](https://challenge.isic-archive.com/data/#2017) |
+| ISIC2018 | [ISIC Challenge](https://challenge.isic-archive.com/data/#2018) |
 
 Point the program to a prepared dataset containing `train`, `val`, and `test` splits. Each split contains `images` and `masks` directories. Image and mask filenames must have matching stems. Masks are binary, with values above 127 indicating foreground. Validation and test masks retain their native resolution.
 
