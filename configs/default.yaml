@@ -1,0 +1,35 @@
+dataset: Kvasir
+seed: 42
+split_seed: 20261016
+device: cuda
+workers: 2
+data: ${REVA_DATA_ROOT}
+output: ${REVA_OUTPUT_DIR}
+encoder_weights: ${DINOV3_WEIGHTS}
+encoder_repo: ${DINOV3_REPO}
+
+training:
+  dsr:
+    epochs: 100
+    batch_size: 8
+    lr: 0.0003
+    weight_decay: 0.01
+    warmup_epochs: 5
+    ema_decay: 0.999
+    scales: [256, 352, 448]
+    auxiliary_weights: [0.1, 0.05, 0.0001, 0.1]
+  executor:
+    epochs: 20
+    batch_size: 4
+    lr: 0.0001
+    weight_decay: 0.0001
+  critic:
+    epochs: 20
+    batch_size: 4
+    lr: 0.0001
+    weight_decay: 0.0001
+  policy:
+    epochs: 200
+    batch_size: 128
+    lr: 0.001
+    weight_decay: 0.001
