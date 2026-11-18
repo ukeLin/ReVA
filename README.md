@@ -2,109 +2,78 @@
 
 **Learning When, Where, and How to Reobserve with a Vision Foundation Model for Medical Image Segmentation**
 
-ReVA performs medical image segmentation through selective visual evidence acquisition. A frozen DINOv3 encoder provides the initial features. The model then chooses whether to obtain another view, where to observe, and which viewing scale to use.
+ReVA uses a frozen DINOv3 encoder for binary medical image segmentation, with at most one additional encoder pass per image.
 
-- **DSR** combines semantic features, RGB guidance, and patch occupancy for the initial prediction.
-- **OVP** predicts the corrective value of region–scale pairs and selects a view or stops.
-- **SER** compares acquired evidence with an initial-view reference and updates the selected region.
+- **DSR** produces the initial prediction from semantic features, RGB guidance, and patch occupancy.
+- **OVP** scores candidate regions and viewing scales, then selects an observation or stops.
+- **SER** uses the acquired evidence and the initial-view reference to update the selected region.
 
-Inference uses at most one additional encoder pass. This implementation supports binary 2D segmentation.
+## Setup
 
-## Installation
-
-Use Python 3.10 or newer and install a PyTorch build compatible with your CUDA environment.
+Use Python 3.10+ and a CUDA-compatible PyTorch installation. From the repository root:
 
 ```bash
-git clone https://github.com/ukeLin/ReVA.git
-cd ReVA
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 ```
 
-Obtain the official [DINOv3 source and ViT-S/16 weights](https://github.com/facebookresearch/dinov3). Pass the source location through `--encoder-repo` or `DINOV3_REPO`; this can be omitted when `dinov3` is already importable. The pretrained backbone and datasets are not distributed here.
+Download the [DINOv3 source and ViT-S/16 weights](https://github.com/facebookresearch/dinov3). Backbone weights and datasets are not included.
 
-## Data
+## Datasets
 
 | Dataset | Download |
 | --- | --- |
 | Kvasir-SEG | [Simula](https://datasets.simula.no/kvasir-seg/) |
-| CVC-ClinicDB | [CVC-Colon datasets](https://pages.cvc.uab.es/CVC-Colon/index.php/databases/) |
-| CVC-ColonDB | [CVC-Colon datasets](https://pages.cvc.uab.es/CVC-Colon/index.php/databases/) |
+| CVC-ClinicDB / CVC-ColonDB | [CVC-Colon](https://pages.cvc.uab.es/CVC-Colon/index.php/databases/) |
 | ETIS-LaribPolypDB | [ETIS-Larib](https://polyp.grand-challenge.org/ETISLarib/) |
 | BKAI-IGH NeoPolyp | [Kaggle](https://www.kaggle.com/competitions/bkai-igh-neopolyp/data) |
 | BUSI | [Cairo University](https://scholar.cu.edu.eg/?q=afahmy/pages/dataset) |
 | ISIC2017 | [ISIC Challenge](https://challenge.isic-archive.com/data/#2017) |
 | ISIC2018 | [ISIC Challenge](https://challenge.isic-archive.com/data/#2018) |
 
-Point the program to a prepared dataset containing `train`, `val`, and `test` splits. Each split contains `images` and `masks` directories. Image and mask filenames must have matching stems. Masks are binary, with values above 127 indicating foreground. Validation and test masks retain their native resolution.
+Prepare `train`, `val`, and `test` splits, each containing `images/` and `masks/` with matching filename stems. Masks are binary; values above 127 indicate foreground. Keep validation and test masks at native resolution. Use the prescribed splits and remove duplicate images before training.
 
-Use the prescribed dataset split and remove duplicate images before training.
+## Training and evaluation
 
-## Training
+Settings are in `configs/default.yaml`. Set these environment variables before running:
 
-All settings are in `configs/default.yaml`. Paths are supplied through environment variables or command-line arguments.
+| Variable | Value |
+| --- | --- |
+| `REVA_DATA_ROOT` | Prepared dataset directory |
+| `REVA_OUTPUT_DIR` | Training output directory |
+| `DINOV3_WEIGHTS` | Pretrained ViT-S/16 weights |
+| `DINOV3_REPO` | DINOv3 source directory; optional if importable |
 
 ```bash
-reva train --config configs/default.yaml \
-  --data-root "$DATA_ROOT" \
-  --output-dir "$OUTPUT_DIR" \
-  --encoder-weights "$DINOV3_WEIGHTS" \
-  --encoder-repo "$DINOV3_REPO" \
-  --seed 42
+reva train --config configs/default.yaml --seed 42
+reva evaluate --config configs/default.yaml --split test
 ```
 
-The complete pipeline trains DSR, caches training observations, fits SER and the critic, learns OVP, and freezes the resulting components. The downstream training roles are disjoint subsets of the training split. DSR is selected on validation Dice; downstream selection and calibration use training-internal partitions.
+Training runs DSR, observation caching, SER, critic, and OVP fitting. Use `--stage dsr`, `cache`, `ser`, `critic`, `ovp`, or `freeze` to run individual stages. DSR selection uses validation Dice; downstream fitting and calibration use training-internal partitions. Use a separate output directory for each seed.
 
-Individual stages can be run with `--stage dsr`, `cache`, `ser`, `critic`, `ovp`, or `freeze`. Use separate output directories for different seeds or configurations. Rerunning an interrupted training command resumes saved checkpoints; completed stages are skipped.
+Evaluation saves native-resolution masks and per-image Dice and HD95, including initial, always-observe, and selective predictions. HD95 is reported in pixels. For empty masks, both-empty pairs receive Dice 1 and HD95 0; one-empty pairs receive the image diagonal as HD95. Evaluation includes multiple controls and is not a latency benchmark.
 
-## Evaluation
-
-```bash
-reva evaluate --config configs/default.yaml \
-  --data-root "$DATA_ROOT" \
-  --output-dir "$OUTPUT_DIR" \
-  --encoder-weights "$DINOV3_WEIGHTS" \
-  --encoder-repo "$DINOV3_REPO" \
-  --split test
-```
-
-Evaluation saves native-resolution predictions and per-image Dice/HD95. The report contains the initial prediction, always-observe control, and selective ReVA output. Evaluation computes these controls together and is not a latency benchmark. HD95 is measured in native pixels. Both-empty masks receive Dice 1 and HD95 0; a single empty mask receives the image diagonal as HD95.
-
-## Single-image prediction
+## Prediction
 
 ```bash
-reva predict --run "$OUTPUT_DIR" \
+reva predict --run "$REVA_OUTPUT_DIR" \
   --encoder-weights "$DINOV3_WEIGHTS" \
   --encoder-repo "$DINOV3_REPO" \
   --input "$IMAGE" --output "$MASK"
 ```
 
-Use `--device cpu` for CPU inference. The run contains the DSR checkpoint and the executor, critic, and policy checkpoints. No ground-truth mask is used during prediction.
+Use `--device cpu` for CPU inference. Prediction requires no ground-truth mask.
 
-## Repository layout
+## Structure
 
-```text
-configs/          Training and runtime configuration
-src/reva/
-  models/         DINOv3 wrapper, DSR, OVP, SER
-  geometry.py     View sampling and local correction mapping
-  evidence.py     Observation descriptors and evidence processing
-  train_dsr.py    Initial readout training
-  engine.py       Downstream fitting and evaluation
-  predictor.py    Single-image inference
-  cli.py          Command-line interface
-tests/            Geometry, model, metric, and configuration checks
-```
+- `configs/`: training and runtime settings.
+- `src/reva/`: models, observation geometry, training, and inference.
+- `tests/`: geometry, model, metric, and configuration checks.
 
-## Tests
-
-```bash
-pip install -e '.[dev]'
-python -m unittest discover -s tests
-```
+Run checks with `python -m unittest discover -s tests`.
 
 ## Acknowledgments
 
-The frozen backbone uses [DINOv3](https://github.com/facebookresearch/dinov3). Boundary-weighted BCE and IoU follow the structure-loss formulation used in [PraNet](https://github.com/DengPingFan/PraNet). DINOv3 code and weights remain subject to their respective licenses.
+The backbone uses [DINOv3](https://github.com/facebookresearch/dinov3). The structure loss follows [PraNet](https://github.com/DengPingFan/PraNet). Third-party code and weights retain their respective licenses.
